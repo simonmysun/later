@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>later</title>
+<style>
+  :root {
+    --bg: #fafafa; --fg: #1a1a1a; --muted: #666; --border: #ddd;
+    --accent: #2563eb; --card: #fff; --danger: #dc2626; --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161616; --fg:#e6e6e6; --muted:#999; --border:#333;
+      --accent:#60a5fa; --card:#1f1f1f; --danger:#f87171; --ok:#4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:12px 16px; border-bottom:1px solid var(--border); display:flex;
+    align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  main { max-width:960px; margin:0 auto; padding:16px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, select, textarea, button {
+    font:inherit; padding:6px 8px; border:1px solid var(--border);
+    border-radius:6px; background:var(--card); color:var(--fg);
+  }
+  input:focus, select:focus, textarea:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.link { background:none; border:none; color:var(--accent); padding:2px 4px; }
+  button.danger { color:var(--danger); }
+  label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:2px; }
+  fieldset { border:1px solid var(--border); border-radius:8px; margin:0 0 16px; padding:12px; }
+  legend { font-weight:600; padding:0 6px; }
+  .item { background:var(--card); border:1px solid var(--border); border-radius:8px;
+    padding:12px; margin-bottom:10px; }
+  .item.read { opacity:.6; }
+  .item.archived { border-style:dashed; }
+  .item h3 { margin:0 0 4px; font-size:15px; }
+  .item h3 a { color:var(--fg); text-decoration:none; }
+  .item h3 a:hover { text-decoration:underline; }
+  .meta { color:var(--muted); font-size:12px; display:flex; gap:10px; flex-wrap:wrap; }
+  .tag { display:inline-block; background:var(--bg); border:1px solid var(--border);
+    border-radius:12px; padding:0 8px; font-size:12px; }
+  .tag.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .summary { margin-top:6px; font-size:13px; color:var(--muted); border-left:2px solid var(--border); padding-left:8px; }
+  .actions { margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
+  .muted { color:var(--muted); }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:16px; }
+  .grow { flex:1 1 160px; }
+  .taglist { display:flex; gap:6px; flex-wrap:wrap; }
+  .taglist button { cursor:pointer; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+    background:var(--fg); color:var(--bg); padding:8px 14px; border-radius:6px;
+    opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:.95; }
+  textarea { width:100%; min-height:48px; resize:vertical; }
+  .star { color:#f59e0b; }
+</style>
+</head>
+<body>
+<header>
+  <h1>later</h1>
+  <span class="muted" id="count"></span>
+  <span class="grow"></span>
+  <label style="flex-direction:row; align-items:center; gap:6px;">
+    token
+    <input id="token" type="password" placeholder="Bearer token" style="width:160px" />
+  </label>
+</header>
+
+<main>
+  <fieldset>
+    <legend>Add</legend>
+    <div class="row">
+      <input id="add-url" class="grow" placeholder="https://…  (required)" style="flex:2 1 300px" />
+      <input id="add-title" class="grow" placeholder="title (optional)" />
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <input id="add-tags" class="grow" placeholder="tags, comma, separated" />
+      <input id="add-priority" type="number" value="0" title="priority" style="width:90px" />
+      <button class="primary" id="add-btn">Add</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <textarea id="add-note" placeholder="note (optional)"></textarea>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Filter</legend>
+    <div class="row">
+      <label class="grow">domain
+        <input id="f-domain" placeholder="example.com" />
+      </label>
+      <label class="grow">keyword (q)
+        <input id="f-q" placeholder="search url/title/note/summary" />
+      </label>
+      <label>tag mode
+        <select id="f-tagmode"><option value="or">or</option><option value="and">and</option></select>
+      </label>
+      <label>read
+        <select id="f-read"><option value="">any</option><option value="false">unread</option><option value="true">read</option></select>
+      </label>
+      <label>archived
+        <select id="f-archived"><option value="false">active</option><option value="true">archived</option><option value="all">all</option></select>
+      </label>
+      <label>summary
+        <select id="f-summary"><option value="">any</option><option value="true">has</option><option value="false">missing</option></select>
+      </label>
+      <label>sort
+        <select id="f-sort"><option value="added_desc">newest</option><option value="added_asc">oldest</option><option value="random">random</option></select>
+      </label>
+      <label>limit
+        <input id="f-limit" type="number" value="50" style="width:80px" />
+      </label>
+      <label style="flex-direction:row; align-items:center; gap:4px;">
+        <input id="f-untagged" type="checkbox" /> untagged
+      </label>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <label class="grow">from (date)
+        <input id="f-from" type="date" />
+      </label>
+      <label class="grow">to (date)
+        <input id="f-to" type="date" />
+      </label>
+      <button class="primary" id="apply-btn" style="align-self:flex-end">Apply</button>
+      <button id="reset-btn" style="align-self:flex-end">Reset</button>
+    </div>
+    <div class="taglist" id="tagfilter" style="margin-top:10px;"></div>
+  </fieldset>
+
+  <div id="list"></div>
+  <div class="pager" id="pager"></div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const state = { offset: 0, selectedTags: new Set() };
+
+// ---- token persistence ----
+$("token").value = localStorage.getItem("later_token") || "";
+$("token").addEventListener("change", () => localStorage.setItem("later_token", $("token").value));
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+async function api(method, path, body) {
+  const headers = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const token = $("token").value.trim();
+  if (token && method !== "GET") headers["Authorization"] = "Bearer " + token;
+  const res = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error((data && data.error) || res.status + " " + res.statusText);
+  return data;
+}
+
+function dateToMs(v, endOfDay) {
+  if (!v) return null;
+  const d = new Date(v + "T00:00:00");
+  if (isNaN(d)) return null;
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+function fmt(ms) { return ms == null ? "" : new Date(ms).toLocaleString(); }
+function esc(s) { return (s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+
+function buildQuery() {
+  const p = new URLSearchParams();
+  const domain = $("f-domain").value.trim(); if (domain) p.set("domain", domain);
+  const q = $("f-q").value.trim(); if (q) p.set("q", q);
+  p.set("tag_mode", $("f-tagmode").value);
+  const read = $("f-read").value; if (read) p.set("read", read);
+  p.set("archived", $("f-archived").value);
+  const summary = $("f-summary").value; if (summary) p.set("has_summary", summary);
+  const sort = $("f-sort").value; p.set("sort", sort);
+  const limit = $("f-limit").value; if (limit) p.set("limit", limit);
+  if ($("f-untagged").checked) p.set("untagged", "true");
+  else if (state.selectedTags.size) p.set("tags", [...state.selectedTags].join(","));
+  const from = dateToMs($("f-from").value, false); if (from != null) p.set("from", from);
+  const to = dateToMs($("f-to").value, true); if (to != null) p.set("to", to);
+  if (sort !== "random") p.set("offset", state.offset);
+  return { params: p, sort };
+}
+
+async function loadTags() {
+  try {
+    const tags = await api("GET", "/api/tags");
+    const box = $("tagfilter");
+    box.innerHTML = "";
+    for (const t of tags) {
+      const b = document.createElement("button");
+      b.className = "tag" + (state.selectedTags.has(t.name) ? " on" : "");
+      b.textContent = `${t.name} (${t.count})`;
+      b.onclick = () => {
+        if (state.selectedTags.has(t.name)) state.selectedTags.delete(t.name);
+        else state.selectedTags.add(t.name);
+        state.offset = 0;
+        load();
+      };
+      box.appendChild(b);
+    }
+  } catch (e) { /* ignore tag load errors */ }
+}
+
+async function load() {
+  const { params, sort } = buildQuery();
+  let data;
+  try {
+    data = await api("GET", "/api/items?" + params.toString());
+  } catch (e) { toast("Load failed: " + e.message); return; }
+
+  const list = $("list");
+  list.innerHTML = "";
+  for (const it of data.items) list.appendChild(renderItem(it));
+
+  if (sort === "random") {
+    $("count").textContent = `${data.items.length} random`;
+    $("pager").innerHTML = "";
+  } else {
+    $("count").textContent = `${data.total} total`;
+    renderPager(data);
+  }
+  loadTags();
+}
+
+function renderPager(data) {
+  const pager = $("pager");
+  pager.innerHTML = "";
+  const limit = data.limit || 50;
+  const cur = Math.floor((data.offset || 0) / limit) + 1;
+  const pages = Math.max(1, Math.ceil((data.total || 0) / limit));
+  const prev = document.createElement("button");
+  prev.textContent = "‹ Prev"; prev.disabled = state.offset <= 0;
+  prev.onclick = () => { state.offset = Math.max(0, state.offset - limit); load(); };
+  const next = document.createElement("button");
+  next.textContent = "Next ›"; next.disabled = state.offset + limit >= (data.total || 0);
+  next.onclick = () => { state.offset += limit; load(); };
+  const info = document.createElement("span");
+  info.className = "muted"; info.textContent = `page ${cur} / ${pages}`;
+  pager.append(prev, info, next);
+}
+
+function renderItem(it) {
+  const el = document.createElement("div");
+  el.className = "item" + (it.is_read ? " read" : "") + (it.archived_at ? " archived" : "");
+  const title = it.title || it.url;
+  const tagsHtml = it.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join(" ");
+  const star = it.priority > 0 ? `<span class="star" title="priority ${it.priority}">★${it.priority > 1 ? it.priority : ""}</span>` : "";
+  el.innerHTML = `
+    <h3>${star} <a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(title)}</a></h3>
+    <div class="meta">
+      <span>${esc(it.domain) || "(no domain)"}</span>
+      <span>${fmt(it.added_at)}</span>
+      ${it.is_read ? `<span>read ${fmt(it.read_at)}</span>` : "<span>unread</span>"}
+      ${it.archived_at ? `<span>archived</span>` : ""}
+    </div>
+    <div class="taglist" style="margin-top:6px;">${tagsHtml}</div>
+    ${it.note ? `<div class="summary">${esc(it.note)}</div>` : ""}
+    ${it.summary ? `<div class="summary"><b>summary:</b> ${esc(it.summary)}</div>` : ""}
+    <div class="actions"></div>
+  `;
+  const actions = el.querySelector(".actions");
+
+  const mkBtn = (label, cls, fn) => {
+    const b = document.createElement("button");
+    b.className = "link " + (cls || ""); b.textContent = label; b.onclick = fn;
+    return b;
+  };
+
+  actions.append(
+    mkBtn(it.is_read ? "mark unread" : "mark read", "", async () => {
+      await mutate(it.id, { is_read: !it.is_read });
+    }),
+    mkBtn(it.archived_at ? "restore" : "archive", "", async () => {
+      await mutate(it.id, { archived: !it.archived_at });
+    }),
+    mkBtn("edit", "", () => editItem(it)),
+    mkBtn("delete", "danger", async () => {
+      if (!confirm("Archive (soft delete) this item?")) return;
+      try { await api("DELETE", `/api/items/${it.id}`); toast("Archived"); load(); }
+      catch (e) { toast(e.message); }
+    }),
+    mkBtn("hard delete", "danger", async () => {
+      if (!confirm("Permanently delete? This cannot be undone.")) return;
+      try { await api("DELETE", `/api/items/${it.id}?hard=true`); toast("Deleted"); load(); }
+      catch (e) { toast(e.message); }
+    }),
+  );
+  return el;
+}
+
+async function mutate(id, patch) {
+  try { await api("PATCH", `/api/items/${id}`, patch); load(); }
+  catch (e) { toast(e.message); }
+}
+
+function editItem(it) {
+  const title = prompt("Title:", it.title || "");
+  if (title === null) return;
+  const note = prompt("Note:", it.note || "");
+  if (note === null) return;
+  const tags = prompt("Tags (comma separated):", it.tags.join(", "));
+  if (tags === null) return;
+  const priority = prompt("Priority (integer):", String(it.priority));
+  if (priority === null) return;
+  const patch = {
+    title, note,
+    tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+    priority: parseInt(priority, 10) || 0,
+  };
+  mutate(it.id, patch);
+}
+
+// ---- add ----
+$("add-btn").onclick = async () => {
+  const url = $("add-url").value.trim();
+  if (!url) { toast("URL required"); return; }
+  const body = {
+    url,
+    title: $("add-title").value.trim() || undefined,
+    note: $("add-note").value.trim() || undefined,
+    tags: $("add-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
+    priority: parseInt($("add-priority").value, 10) || 0,
+  };
+  try {
+    await api("POST", "/api/items", body);
+    $("add-url").value = ""; $("add-title").value = ""; $("add-note").value = ""; $("add-tags").value = "";
+    $("add-priority").value = "0";
+    toast("Added");
+    state.offset = 0; load();
+  } catch (e) { toast(e.message); }
+};
+
+$("apply-btn").onclick = () => { state.offset = 0; load(); };
+$("reset-btn").onclick = () => {
+  ["f-domain","f-q","f-from","f-to"].forEach((id) => $(id).value = "");
+  $("f-tagmode").value = "or"; $("f-read").value = ""; $("f-archived").value = "false";
+  $("f-summary").value = ""; $("f-sort").value = "added_desc"; $("f-limit").value = "50";
+  $("f-untagged").checked = false; state.selectedTags.clear(); state.offset = 0; load();
+};
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+services:
+  later:
+    build: .
+    image: later:latest
+    container_name: later
+    restart: unless-stopped
+    environment:
+      # Required: Bearer token for write operations. Set it in .env.
+      LATER_TOKEN: ${LATER_TOKEN:?set LATER_TOKEN in .env}
+      # Bind inside the container to all interfaces; host mapping restricts exposure.
+      HOST: 0.0.0.0
+      PORT: 8787
+      DB_PATH: /app/data/later.db
+      # Set to "true" to also require the token on GET requests.
+      LATER_AUTH_READ: ${LATER_AUTH_READ:-false}
+    ports:
+      # Publish only to localhost on the host by default. Change to
+      # "8787:8787" to expose on all host interfaces.
+      - "127.0.0.1:${PORT:-8787}:8787"
+    volumes:
+      # Persist the SQLite DB (plus its -wal/-shm sidecars) on the host.
+      - ./data:/app/data

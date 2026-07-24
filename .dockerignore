@@ -1,0 +1,12 @@
+node_modules
+data
+.git
+.gitignore
+.env
+*.log
+test
+docs
+.playwright-mcp
+README.md
+tsconfig.json
+package-lock.json

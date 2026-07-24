@@ -1,0 +1,20 @@
+{
+  "name": "later",
+  "version": "0.1.0",
+  "description": "Personal reading-list manager: record URLs, tags, filter and sort. Node.js + node:sqlite, zero build.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "test": "node --test",
+    "import-md": "node scripts/import-md.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}
