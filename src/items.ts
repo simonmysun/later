@@ -1,6 +1,7 @@
 import type { SQLInputValue } from "node:sqlite";
 import type { DB } from "./db.ts";
 import { upsertTag } from "./tags.ts";
+import { canonicalizeUrl } from "./canonicalize/index.ts";
 import {
   badRequest,
   normalizeOptionalText,
@@ -100,7 +101,9 @@ export function createItem(db: DB, input: CreateItemInput): ItemResponse {
   if (typeof input.url !== "string" || input.url.trim() === "") {
     throw badRequest("url is required and must be a non-empty string");
   }
-  const url = input.url;
+  // Apply per-site canonicalization at the storage boundary so the stored value
+  // (and dedup key) is stable, e.g. readhacker.news /s/<id> -> /c/<id>.
+  const url = canonicalizeUrl(input.url);
   const domain = parseDomain(url);
 
   const title = normalizeOptionalText(input.title) ?? null;
@@ -153,6 +156,7 @@ export interface ListQuery {
   tag_mode: "and" | "or";
   untagged?: boolean;
   domain?: string;
+  url?: string;
   from?: number;
   to?: number;
   read?: boolean;
@@ -181,9 +185,19 @@ function buildWhere(q: ListQuery): { clause: string; params: SQLInputValue[] } {
   else if (q.archived === "true") conds.push("i.archived_at IS NOT NULL");
   // "all" => no condition
 
+  if (q.url !== undefined) {
+    conds.push("i.url = ?");
+    params.push(q.url);
+  }
   if (q.domain !== undefined) {
     conds.push("i.domain = ?");
     params.push(q.domain);
+  }
+  // Exact URL match (used by scripts for de-duplication). Independent of the
+  // `q` LIKE substring branch below.
+  if (q.url !== undefined) {
+    conds.push("i.url = ?");
+    params.push(q.url);
   }
   if (q.from !== undefined) {
     conds.push("i.added_at >= ?");

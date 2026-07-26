@@ -1,0 +1,4 @@
+[
+  { "url": "https://hnrss.org/frontpage", "tags": ["hn"] },
+  { "url": "https://www.theverge.com/rss/index.xml", "tags": ["tech", "news"] }
+]

@@ -249,6 +249,93 @@ test("pagination consistency", async () => {
   assert.equal(overlap.length, 0);
 });
 
+test("15. exact url filter matches only exact url (not substring)", async () => {
+  const short = await AUTH("POST", "/api/items", {
+    url: "https://news.ycombinator.com/item?id=419",
+  });
+  const long = await AUTH("POST", "/api/items", {
+    url: "https://news.ycombinator.com/item?id=41972880",
+  });
+
+  // exact url= returns only the exact match
+  const exact = await req(
+    "GET",
+    "/api/items?url=" + encodeURIComponent("https://news.ycombinator.com/item?id=419"),
+  );
+  assert.equal(exact.json.items.length, 1);
+  assert.equal(exact.json.items[0].id, short.json.id);
+  assert.ok(!exact.json.items.some((i: any) => i.id === long.json.id));
+
+  // the long url is only reachable via its own exact value
+  const exactLong = await req(
+    "GET",
+    "/api/items?url=" + encodeURIComponent("https://news.ycombinator.com/item?id=41972880"),
+  );
+  assert.equal(exactLong.json.items.length, 1);
+  assert.equal(exactLong.json.items[0].id, long.json.id);
+
+  // contrast: q= is a substring match, so the short id matches both
+  const like = await req(
+    "GET",
+    "/api/items?q=" + encodeURIComponent("item?id=419"),
+  );
+  const likeIds = new Set(like.json.items.map((i: any) => i.id));
+  assert.ok(likeIds.has(short.json.id));
+  assert.ok(likeIds.has(long.json.id));
+});
+
+test("16. exact url filter combined with archived=all catches archived dupes", async () => {
+  const u = "https://dup.test/exact-url";
+  const created = await AUTH("POST", "/api/items", { url: u });
+  await AUTH("PATCH", `/api/items/${created.json.id}`, { archived: true });
+
+  // default (archived hidden) => not found
+  const def = await req("GET", "/api/items?url=" + encodeURIComponent(u));
+  assert.equal(def.json.items.length, 0);
+
+  // archived=all => the archived duplicate is visible
+  const all = await req("GET", "/api/items?url=" + encodeURIComponent(u) + "&archived=all&limit=1");
+  assert.equal(all.json.items.length, 1);
+  assert.equal(all.json.items[0].id, created.json.id);
+});
+
+test("17. POST canonicalizes readhacker /s/ -> /c/ (stored url + domain)", async () => {
+  const r = await AUTH("POST", "/api/items", { url: "https://readhacker.news/s/CANON1" });
+  assert.equal(r.status, 201);
+  assert.equal(r.json.url, "https://readhacker.news/c/CANON1");
+  assert.equal(r.json.domain, "readhacker.news");
+
+  // The canonical /c/ URL is what is stored, so exact-url lookup uses /c/.
+  const byC = await req(
+    "GET",
+    "/api/items?url=" + encodeURIComponent("https://readhacker.news/c/CANON1"),
+  );
+  assert.ok(byC.json.items.some((i: any) => i.id === r.json.id));
+
+  // Looking up the original /s/ form does NOT match (it was rewritten on store).
+  const byS = await req(
+    "GET",
+    "/api/items?url=" + encodeURIComponent("https://readhacker.news/s/CANON1"),
+  );
+  assert.ok(!byS.json.items.some((i: any) => i.id === r.json.id));
+});
+
+test("17b. /s/ and /c/ of same id collapse to one stored url (dedup key)", async () => {
+  const s = await AUTH("POST", "/api/items", { url: "https://readhacker.news/s/CANON2" });
+  const c = await AUTH("POST", "/api/items", { url: "https://readhacker.news/c/CANON2" });
+  // No dedup by design, but both store the same canonical URL, so a script's
+  // existsByUrl(/c/) check would find the /s/-added item.
+  assert.equal(s.json.url, "https://readhacker.news/c/CANON2");
+  assert.equal(c.json.url, "https://readhacker.news/c/CANON2");
+  const both = await req(
+    "GET",
+    "/api/items?url=" + encodeURIComponent("https://readhacker.news/c/CANON2") + "&limit=10",
+  );
+  const ids = new Set(both.json.items.map((i: any) => i.id));
+  assert.ok(ids.has(s.json.id));
+  assert.ok(ids.has(c.json.id));
+});
+
 test("404 for unknown item and endpoint", async () => {
   assert.equal((await req("GET", "/api/items/999999")).status, 404);
   assert.equal((await req("GET", "/api/nope")).status, 404);

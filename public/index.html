@@ -63,6 +63,7 @@
   <h1>later</h1>
   <span class="muted" id="count"></span>
   <span class="grow"></span>
+  <button id="export-failed-btn" title="Download {id,url} JSON of items whose summary is the auto-summary-failed placeholder">Export failed summaries</button>
   <label style="flex-direction:row; align-items:center; gap:6px;">
     token
     <input id="token" type="password" placeholder="Bearer token" style="width:160px" />
@@ -140,6 +141,10 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const state = { offset: 0, selectedTags: new Set() };
+
+// Must match scripts/summarize.ts SUMMARY_FAIL_PREFIX default. If you change
+// the prefix there (env), change it here too — see README ("coupling").
+const SUMMARY_FAIL_PREFIX = "[auto-summary-failed]";
 
 // ---- token persistence ----
 $("token").value = localStorage.getItem("later_token") || "";
@@ -337,6 +342,54 @@ $("add-btn").onclick = async () => {
     toast("Added");
     state.offset = 0; load();
   } catch (e) { toast(e.message); }
+};
+
+// ---- export failed summaries ----
+// Find items whose summary is the auto-summary-failed placeholder and download
+// them as a {id,url}[] JSON file. Feed this file to:
+//   node scripts/summarize.ts --retry-file <file>
+// The server q= filter is a LIKE substring match, so re-verify client-side with
+// startsWith(PREFIX) to guard against false positives.
+$("export-failed-btn").onclick = async () => {
+  const btn = $("export-failed-btn");
+  btn.disabled = true;
+  try {
+    const out = [];
+    const limit = 200;
+    let offset = 0;
+    for (;;) {
+      const p = new URLSearchParams();
+      p.set("q", SUMMARY_FAIL_PREFIX);
+      p.set("has_summary", "true");
+      p.set("archived", "all");
+      p.set("sort", "added_asc");
+      p.set("limit", String(limit));
+      p.set("offset", String(offset));
+      const data = await api("GET", "/api/items?" + p.toString());
+      const items = data.items || [];
+      for (const it of items) {
+        if (it.summary && it.summary.startsWith(SUMMARY_FAIL_PREFIX)) {
+          out.push({ id: it.id, url: it.url });
+        }
+      }
+      offset += items.length;
+      if (items.length < limit || offset >= (data.total || 0)) break;
+    }
+    if (out.length === 0) { toast("No failed summaries"); return; }
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "summary-failed.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    toast(`Exported ${out.length} item(s)`);
+  } catch (e) {
+    toast("Export failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 $("apply-btn").onclick = () => { state.offset = 0; load(); };

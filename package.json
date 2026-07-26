@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/server.ts",
     "dev": "node --watch src/server.ts",
-    "test": "node --test",
+    "test": "node --test \"test/**/*.test.ts\"",
     "import-md": "node scripts/import-md.ts",
     "typecheck": "tsc --noEmit"
   },

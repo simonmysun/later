@@ -1,12 +1,16 @@
 node_modules
+scripts/node_modules
 data
 .git
 .gitignore
 .env
 *.log
 test
+scripts/test
 docs
 .playwright-mcp
 README.md
 tsconfig.json
 package-lock.json
+# The scripts image (Dockerfile.scripts) needs the scripts lockfile for npm ci.
+!scripts/package-lock.json

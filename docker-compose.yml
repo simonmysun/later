@@ -1,4 +1,7 @@
 services:
+  # ---------------------------------------------------------------------------
+  # The app: HTTP API + static frontend.
+  # ---------------------------------------------------------------------------
   later:
     build: .
     image: later:latest
@@ -20,3 +23,104 @@ services:
     volumes:
       # Persist the SQLite DB (plus its -wal/-shm sidecars) on the host.
       - ./data:/app/data
+
+  # ---------------------------------------------------------------------------
+  # Automation scripts. Each is a periodic worker: run once, sleep, repeat.
+  # They talk to the app over the compose network (http://later:8787) and share
+  # the ./data volume so cursor state (hn-state.json) survives restarts — a
+  # single `docker compose up` resumes exactly where the previous run left off.
+  # All three use the same image (Dockerfile.scripts).
+  # ---------------------------------------------------------------------------
+
+  # RSS importer.
+  rss:
+    build:
+      context: .
+      dockerfile: Dockerfile.scripts
+    image: later-scripts:latest
+    container_name: later-rss
+    restart: unless-stopped
+    depends_on:
+      - later
+    environment:
+      LATER_BASE_URL: http://later:8787
+      LATER_TOKEN: ${LATER_TOKEN:?set LATER_TOKEN in .env}
+      RSS_INTERVAL: ${RSS_INTERVAL:-3600}
+    volumes:
+      - ./data:/app/data
+      # Optional custom feed list (overrides the built-in scripts/feeds.json).
+      - ./feeds.json:/app/scripts/feeds.json:ro
+    # Loop: import, then sleep RSS_INTERVAL seconds. Errors do not stop the loop.
+    command: >
+      sh -c 'while true; do
+        node rss.ts || echo "rss run failed (continuing)";
+        sleep "$$RSS_INTERVAL";
+      done'
+
+  # AI summary worker.
+  summarize:
+    build:
+      context: .
+      dockerfile: Dockerfile.scripts
+    image: later-scripts:latest
+    container_name: later-summarize
+    restart: unless-stopped
+    depends_on:
+      - later
+    environment:
+      LATER_BASE_URL: http://later:8787
+      LATER_TOKEN: ${LATER_TOKEN:?set LATER_TOKEN in .env}
+      # Fetch backend: set one of CRAWL4AI_BASE_URL or BROWSERLESS_API_URL (or
+      # force via SUMMARY_FETCH_BACKEND). Both are optional individually.
+      SUMMARY_FETCH_BACKEND: ${SUMMARY_FETCH_BACKEND:-}
+      CRAWL4AI_BASE_URL: ${CRAWL4AI_BASE_URL:-}
+      CRAWL4AI_TOKEN: ${CRAWL4AI_TOKEN:-}
+      BROWSERLESS_API_URL: ${BROWSERLESS_API_URL:-}
+      BROWSERLESS_API_TOKEN: ${BROWSERLESS_API_TOKEN:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in .env}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      SUMMARY_MAX_INPUT_CHARS: ${SUMMARY_MAX_INPUT_CHARS:-12000}
+      SUMMARY_FAIL_PREFIX: ${SUMMARY_FAIL_PREFIX:-[auto-summary-failed]}
+      # Prompt directory: content.md / discussion.md / comment.md (see mount below).
+      SUMMARY_PROMPT_DIR: /app/prompts
+      SUMMARY_INTERVAL: ${SUMMARY_INTERVAL:-600}
+      SUMMARY_LIMIT: ${SUMMARY_LIMIT:-25}
+    volumes:
+      - ./data:/app/data
+      # Mount the editable prompt directory; edit files under ./scripts/prompts
+      # and changes take effect on the next loop iteration (read once per run).
+      # Any missing file falls back to a built-in default.
+      - ./scripts/prompts:/app/prompts:ro
+    command: >
+      sh -c 'while true; do
+        node summarize.ts --limit "$$SUMMARY_LIMIT" || echo "summarize run failed (continuing)";
+        sleep "$$SUMMARY_INTERVAL";
+      done'
+
+  # Hacker News forward + backfill worker (stateful cursor in ./data/hn-state.json).
+  hn:
+    build:
+      context: .
+      dockerfile: Dockerfile.scripts
+    image: later-scripts:latest
+    container_name: later-hn
+    restart: unless-stopped
+    depends_on:
+      - later
+    environment:
+      LATER_BASE_URL: http://later:8787
+      LATER_TOKEN: ${LATER_TOKEN:?set LATER_TOKEN in .env}
+      HN_BACKFILL_DAYS: ${HN_BACKFILL_DAYS:-3}
+      HN_STORY_MIN_POINTS: ${HN_STORY_MIN_POINTS:-100}
+      HN_COMMENTS_FORWARD_MAX: ${HN_COMMENTS_FORWARD_MAX:-30}
+      # State file on the shared volume so backfill resumes across restarts.
+      HN_STATE_PATH: /app/data/hn-state.json
+      HN_INTERVAL: ${HN_INTERVAL:-21600}
+    volumes:
+      - ./data:/app/data
+    command: >
+      sh -c 'while true; do
+        node hn.ts || echo "hn run failed (continuing)";
+        sleep "$$HN_INTERVAL";
+      done'

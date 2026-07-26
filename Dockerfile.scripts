@@ -1,0 +1,22 @@
+# later automation scripts (RSS / AI summary / Hacker News).
+# Separate image from the app: these have a runtime dependency (fast-xml-parser)
+# and are run as periodic workers, not the HTTP server.
+FROM node:24-alpine
+
+ENV NODE_ENV=production
+
+WORKDIR /app/scripts
+
+# Install script dependencies against the lockfile for reproducibility.
+COPY scripts/package.json scripts/package-lock.json ./
+RUN npm ci --omit=dev
+
+# Script sources.
+COPY scripts/ ./
+
+# Data dir holds cursor state (e.g. hn-state.json); mounted at runtime.
+RUN mkdir -p /app/data && chown -R node:node /app
+
+USER node
+
+# No default CMD: each compose service supplies its own loop command.

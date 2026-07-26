@@ -83,6 +83,10 @@ function parseListQuery(sp: URLSearchParams): ListQuery {
   const domainRaw = sp.get("domain");
   const domain = domainRaw !== null ? domainRaw : undefined;
 
+  // Exact URL match (used by automation scripts for dedup).
+  const urlRaw = sp.get("url");
+  const url = urlRaw !== null && urlRaw !== "" ? urlRaw : undefined;
+
   const from = parseOptionalNonNegInt(sp.get("from"), "from");
   const to = parseOptionalNonNegInt(sp.get("to"), "to");
   const read = parseBool(sp.get("read"), "read");
@@ -99,6 +103,7 @@ function parseListQuery(sp: URLSearchParams): ListQuery {
     tag_mode,
     untagged: untagged === true ? true : undefined,
     domain,
+    url,
     from,
     to,
     read,

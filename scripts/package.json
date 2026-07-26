@@ -1,0 +1,25 @@
+{
+  "name": "later-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automation scripts for the later app (RSS import, AI summaries, Hacker News). Standalone, HTTP-only, host-run (not in the Docker image).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "import-md": "node import-md.ts",
+    "rss": "node rss.ts",
+    "summarize": "node summarize.ts",
+    "hn": "node hn.ts"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}
